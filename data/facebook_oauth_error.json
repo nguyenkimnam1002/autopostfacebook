@@ -1,0 +1,5 @@
+{
+  "stage": "exchange_code",
+  "message": "Network error: [Errno 11001] getaddrinfo failed",
+  "created_at": 1781831228
+}

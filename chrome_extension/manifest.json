@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Affiliate Hot Tool Connector",
+  "version": "1.0.1",
+  "description": "Connects the localhost Affiliate Hot Tool to the current Chrome Shopee session.",
+  "permissions": ["storage", "cookies", "scripting", "tabs", "windows"],
+  "host_permissions": [
+    "https://shopee.vn/*",
+    "https://affiliate.shopee.vn/*",
+    "https://facebook.com/*",
+    "https://www.facebook.com/*",
+    "http://127.0.0.1:8001/*",
+    "http://localhost:8001/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8001/affiliate_hot_tool*",
+        "http://localhost:8001/affiliate_hot_tool*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Affiliate Hot Tool",
+    "default_popup": "popup.html"
+  }
+}

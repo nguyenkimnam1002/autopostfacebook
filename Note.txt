@@ -1,0 +1,9 @@
++) Tạo tài khoản develop meta
++) Tạo app ứng dụng
++) Chọn loại ứng dụng là Kinh doanh
++) Thêm sản phẩm là "Đăng nhập bằng Facebook"
++) Cài đặt ứng dụng: Điền các thông tin miền ứng dụng, url để chuyển chế độ ứng dụng sang Chính thức thì các bài đăng mới ở public
++) Ở trình khám phá API thì tạo Quyền để cho tài khoản này có thể đăng, quản lý....
+Các quyền là show_lis, read_engagement, read_user_content, manage_posts, manage_engagement.
++) Generation Acccess Token để lấy token public cho các quyền và hoạt động trên
++) 1 tài khoản liên kết với 1 token.

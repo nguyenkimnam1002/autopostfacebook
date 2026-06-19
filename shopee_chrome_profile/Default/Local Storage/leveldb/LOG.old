@@ -1,0 +1,112 @@
+2026/06/19-09:58:16.590 310c Reusing MANIFEST D:\WORK_2\hayho\affiliate_hot_tool\shopee_chrome_profile\Default\Local Storage\leveldb/MANIFEST-000001
+2026/06/19-09:58:16.593 310c Recovering log #40
+2026/06/19-09:58:16.593 310c Level-0 table #43: started
+2026/06/19-09:58:16.595 310c Level-0 table #43: 22924 bytes OK
+2026/06/19-09:58:16.597 310c Delete type=0 #40
+2026/06/19-10:00:17.401 b2f4 Level-0 table #46: started
+2026/06/19-10:00:17.404 b2f4 Level-0 table #46: 22253 bytes OK
+2026/06/19-10:00:17.404 b2f4 Delete type=0 #44
+2026/06/19-10:05:17.405 b2f4 Level-0 table #48: started
+2026/06/19-10:05:17.409 b2f4 Level-0 table #48: 21168 bytes OK
+2026/06/19-10:05:17.411 b2f4 Delete type=0 #45
+2026/06/19-10:05:17.412 b2f4 Compacting 4@0 + 1@1 files
+2026/06/19-10:05:17.415 b2f4 Generated table #49@0: 36 keys, 21027 bytes
+2026/06/19-10:05:17.415 b2f4 Compacted 4@0 + 1@1 files => 21027 bytes
+2026/06/19-10:05:17.415 b2f4 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-10:05:17.416 b2f4 Delete type=2 #39
+2026/06/19-10:05:17.416 b2f4 Delete type=2 #41
+2026/06/19-10:05:17.416 b2f4 Delete type=2 #43
+2026/06/19-10:05:17.416 b2f4 Delete type=2 #46
+2026/06/19-10:05:17.416 b2f4 Delete type=2 #48
+2026/06/19-10:10:17.398 b2f4 Level-0 table #51: started
+2026/06/19-10:10:17.402 b2f4 Level-0 table #51: 21168 bytes OK
+2026/06/19-10:10:17.403 b2f4 Delete type=0 #47
+2026/06/19-10:15:17.406 b2f4 Level-0 table #53: started
+2026/06/19-10:15:17.409 b2f4 Level-0 table #53: 21168 bytes OK
+2026/06/19-10:15:17.411 b2f4 Delete type=0 #50
+2026/06/19-10:20:17.404 b2f4 Level-0 table #55: started
+2026/06/19-10:20:17.408 b2f4 Level-0 table #55: 21168 bytes OK
+2026/06/19-10:20:17.409 b2f4 Delete type=0 #52
+2026/06/19-10:25:17.406 b2f4 Level-0 table #57: started
+2026/06/19-10:25:17.409 b2f4 Level-0 table #57: 21168 bytes OK
+2026/06/19-10:25:17.410 b2f4 Delete type=0 #54
+2026/06/19-10:25:17.411 b2f4 Compacting 4@0 + 1@1 files
+2026/06/19-10:25:17.415 b2f4 Generated table #58@0: 36 keys, 21027 bytes
+2026/06/19-10:25:17.415 b2f4 Compacted 4@0 + 1@1 files => 21027 bytes
+2026/06/19-10:25:17.416 b2f4 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-10:25:17.416 b2f4 Delete type=2 #49
+2026/06/19-10:25:17.416 b2f4 Delete type=2 #51
+2026/06/19-10:25:17.416 b2f4 Delete type=2 #53
+2026/06/19-10:25:17.416 b2f4 Delete type=2 #55
+2026/06/19-10:25:17.416 b2f4 Delete type=2 #57
+2026/06/19-10:28:17.403 b2f4 Level-0 table #60: started
+2026/06/19-10:28:17.406 b2f4 Level-0 table #60: 22763 bytes OK
+2026/06/19-10:28:17.407 b2f4 Delete type=0 #56
+2026/06/19-10:33:17.395 b2f4 Level-0 table #62: started
+2026/06/19-10:33:17.398 b2f4 Level-0 table #62: 21168 bytes OK
+2026/06/19-10:33:17.399 b2f4 Delete type=0 #59
+2026/06/19-10:36:17.400 b2f4 Level-0 table #64: started
+2026/06/19-10:36:17.403 b2f4 Level-0 table #64: 22332 bytes OK
+2026/06/19-10:36:17.404 b2f4 Delete type=0 #61
+2026/06/19-10:41:17.398 b2f4 Level-0 table #66: started
+2026/06/19-10:41:17.403 b2f4 Level-0 table #66: 21168 bytes OK
+2026/06/19-10:41:17.404 b2f4 Delete type=0 #63
+2026/06/19-10:41:17.405 b2f4 Compacting 4@0 + 1@1 files
+2026/06/19-10:41:17.411 b2f4 Generated table #67@0: 35 keys, 20149 bytes
+2026/06/19-10:41:17.411 b2f4 Compacted 4@0 + 1@1 files => 20149 bytes
+2026/06/19-10:41:17.412 b2f4 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-10:41:17.413 b2f4 Delete type=2 #58
+2026/06/19-10:41:17.413 b2f4 Delete type=2 #60
+2026/06/19-10:41:17.413 b2f4 Delete type=2 #62
+2026/06/19-10:41:17.413 b2f4 Delete type=2 #64
+2026/06/19-10:41:17.414 b2f4 Delete type=2 #66
+2026/06/19-10:44:17.410 b2f4 Level-0 table #69: started
+2026/06/19-10:44:17.415 b2f4 Level-0 table #69: 22335 bytes OK
+2026/06/19-10:44:17.416 b2f4 Delete type=0 #65
+2026/06/19-10:49:17.403 b2f4 Level-0 table #71: started
+2026/06/19-10:49:17.405 b2f4 Level-0 table #71: 31595 bytes OK
+2026/06/19-10:49:17.406 b2f4 Delete type=0 #68
+2026/06/19-10:54:17.411 b2f4 Level-0 table #73: started
+2026/06/19-10:54:17.415 b2f4 Level-0 table #73: 21167 bytes OK
+2026/06/19-10:54:17.416 b2f4 Delete type=0 #70
+2026/06/19-10:59:17.402 b2f4 Level-0 table #75: started
+2026/06/19-10:59:17.406 b2f4 Level-0 table #75: 21168 bytes OK
+2026/06/19-10:59:17.407 b2f4 Delete type=0 #72
+2026/06/19-10:59:17.407 b2f4 Compacting 4@0 + 1@1 files
+2026/06/19-10:59:17.410 b2f4 Generated table #76@0: 36 keys, 21013 bytes
+2026/06/19-10:59:17.410 b2f4 Compacted 4@0 + 1@1 files => 21013 bytes
+2026/06/19-10:59:17.411 b2f4 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-10:59:17.411 b2f4 Delete type=2 #67
+2026/06/19-10:59:17.411 b2f4 Delete type=2 #69
+2026/06/19-10:59:17.411 b2f4 Delete type=2 #71
+2026/06/19-10:59:17.411 b2f4 Delete type=2 #73
+2026/06/19-10:59:17.411 b2f4 Delete type=2 #75
+2026/06/19-11:04:17.400 b2f4 Level-0 table #78: started
+2026/06/19-11:04:17.401 b2f4 Level-0 table #78: 32048 bytes OK
+2026/06/19-11:04:17.402 b2f4 Delete type=0 #74
+2026/06/19-11:05:17.403 b2f4 Level-0 table #80: started
+2026/06/19-11:05:17.405 b2f4 Level-0 table #80: 34292 bytes OK
+2026/06/19-11:05:17.406 b2f4 Delete type=0 #77
+2026/06/19-11:08:17.400 b2f4 Level-0 table #82: started
+2026/06/19-11:08:17.403 b2f4 Level-0 table #82: 23093 bytes OK
+2026/06/19-11:08:17.404 b2f4 Delete type=0 #79
+2026/06/19-11:13:17.410 b2f4 Level-0 table #84: started
+2026/06/19-11:13:17.415 b2f4 Level-0 table #84: 21168 bytes OK
+2026/06/19-11:13:17.416 b2f4 Delete type=0 #81
+2026/06/19-11:13:17.417 b2f4 Compacting 4@0 + 1@1 files
+2026/06/19-11:13:17.422 b2f4 Generated table #85@0: 36 keys, 21029 bytes
+2026/06/19-11:13:17.422 b2f4 Compacted 4@0 + 1@1 files => 21029 bytes
+2026/06/19-11:13:17.422 b2f4 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-11:13:17.423 b2f4 Delete type=2 #76
+2026/06/19-11:13:17.423 b2f4 Delete type=2 #78
+2026/06/19-11:13:17.423 b2f4 Delete type=2 #80
+2026/06/19-11:13:17.423 b2f4 Delete type=2 #82
+2026/06/19-11:13:17.423 b2f4 Delete type=2 #84
+2026/06/19-11:18:17.399 b2f4 Level-0 table #87: started
+2026/06/19-11:18:17.400 b2f4 Level-0 table #87: 21168 bytes OK
+2026/06/19-11:18:17.401 b2f4 Delete type=0 #83
+2026/06/19-11:23:17.399 b2f4 Level-0 table #89: started
+2026/06/19-11:23:17.401 b2f4 Level-0 table #89: 21168 bytes OK
+2026/06/19-11:23:17.403 b2f4 Delete type=0 #86
+2026/06/19-11:27:37.658 def8 Level-0 table #91: started
+2026/06/19-11:27:37.664 def8 Level-0 table #91: 21168 bytes OK
