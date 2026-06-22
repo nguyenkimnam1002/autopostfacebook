@@ -1,0 +1,144 @@
+2026/06/19-14:54:09.227 e36c Reusing MANIFEST D:\WORK_2\hayho\affiliate_hot_tool\shopee_chrome_profile\Default\Local Storage\leveldb/MANIFEST-000001
+2026/06/19-14:54:09.230 e36c Recovering log #88
+2026/06/19-14:54:09.231 e36c Level-0 table #91: started
+2026/06/19-14:54:09.232 e36c Level-0 table #91: 21168 bytes OK
+2026/06/19-14:54:09.233 e36c Recovering log #90
+2026/06/19-14:54:09.233 e36c Level-0 table #92: started
+2026/06/19-14:54:09.235 e36c Level-0 table #92: 12460 bytes OK
+2026/06/19-14:54:09.237 e36c Delete type=0 #88
+2026/06/19-14:54:09.237 e36c Delete type=0 #90
+2026/06/19-14:54:09.238 dcac Compacting 4@0 + 1@1 files
+2026/06/19-14:54:09.241 dcac Generated table #94@0: 39 keys, 28997 bytes
+2026/06/19-14:54:09.241 dcac Compacted 4@0 + 1@1 files => 28997 bytes
+2026/06/19-14:54:09.241 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-14:54:09.242 dcac Delete type=2 #85
+2026/06/19-14:54:09.242 dcac Delete type=2 #87
+2026/06/19-14:54:09.242 dcac Delete type=2 #89
+2026/06/19-14:54:09.242 dcac Delete type=2 #91
+2026/06/19-14:54:09.242 dcac Delete type=2 #92
+2026/06/19-14:56:10.213 dcac Level-0 table #96: started
+2026/06/19-14:56:10.217 dcac Level-0 table #96: 22672 bytes OK
+2026/06/19-14:56:10.218 dcac Delete type=0 #93
+2026/06/19-15:01:10.222 dcac Level-0 table #98: started
+2026/06/19-15:01:10.228 dcac Level-0 table #98: 23457 bytes OK
+2026/06/19-15:01:10.229 dcac Delete type=0 #95
+2026/06/19-15:06:10.218 dcac Level-0 table #100: started
+2026/06/19-15:06:10.221 dcac Level-0 table #100: 21168 bytes OK
+2026/06/19-15:06:10.223 dcac Delete type=0 #97
+2026/06/19-15:11:10.221 dcac Level-0 table #102: started
+2026/06/19-15:11:10.224 dcac Level-0 table #102: 21168 bytes OK
+2026/06/19-15:11:10.225 dcac Delete type=0 #99
+2026/06/19-15:11:10.226 dcac Compacting 4@0 + 1@1 files
+2026/06/19-15:11:10.229 dcac Generated table #103@0: 35 keys, 20146 bytes
+2026/06/19-15:11:10.229 dcac Compacted 4@0 + 1@1 files => 20146 bytes
+2026/06/19-15:11:10.230 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-15:11:10.230 dcac Delete type=2 #94
+2026/06/19-15:11:10.230 dcac Delete type=2 #96
+2026/06/19-15:11:10.231 dcac Delete type=2 #98
+2026/06/19-15:11:10.231 dcac Delete type=2 #100
+2026/06/19-15:11:10.231 dcac Delete type=2 #102
+2026/06/19-15:16:10.211 dcac Level-0 table #105: started
+2026/06/19-15:16:10.213 dcac Level-0 table #105: 21172 bytes OK
+2026/06/19-15:16:10.214 dcac Delete type=0 #101
+2026/06/19-15:21:10.217 dcac Level-0 table #107: started
+2026/06/19-15:21:10.220 dcac Level-0 table #107: 21167 bytes OK
+2026/06/19-15:21:10.221 dcac Delete type=0 #104
+2026/06/19-15:24:10.220 dcac Level-0 table #109: started
+2026/06/19-15:24:10.223 dcac Level-0 table #109: 22342 bytes OK
+2026/06/19-15:24:10.224 dcac Delete type=0 #106
+2026/06/19-15:27:10.224 dcac Level-0 table #111: started
+2026/06/19-15:27:10.226 dcac Level-0 table #111: 22699 bytes OK
+2026/06/19-15:27:10.228 dcac Delete type=0 #108
+2026/06/19-15:27:10.228 dcac Compacting 4@0 + 1@1 files
+2026/06/19-15:27:10.232 dcac Generated table #112@0: 35 keys, 20176 bytes
+2026/06/19-15:27:10.232 dcac Compacted 4@0 + 1@1 files => 20176 bytes
+2026/06/19-15:27:10.232 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-15:27:10.233 dcac Delete type=2 #103
+2026/06/19-15:27:10.233 dcac Delete type=2 #105
+2026/06/19-15:27:10.233 dcac Delete type=2 #107
+2026/06/19-15:27:10.233 dcac Delete type=2 #109
+2026/06/19-15:27:10.233 dcac Delete type=2 #111
+2026/06/19-15:32:10.207 dcac Level-0 table #114: started
+2026/06/19-15:32:10.210 dcac Level-0 table #114: 21168 bytes OK
+2026/06/19-15:32:10.211 dcac Delete type=0 #110
+2026/06/19-15:37:10.215 dcac Level-0 table #116: started
+2026/06/19-15:37:10.218 dcac Level-0 table #116: 21168 bytes OK
+2026/06/19-15:37:10.219 dcac Delete type=0 #113
+2026/06/19-15:42:10.219 dcac Level-0 table #118: started
+2026/06/19-15:42:10.221 dcac Level-0 table #118: 21168 bytes OK
+2026/06/19-15:42:10.222 dcac Delete type=0 #115
+2026/06/19-15:47:10.205 dcac Level-0 table #120: started
+2026/06/19-15:47:10.208 dcac Level-0 table #120: 21168 bytes OK
+2026/06/19-15:47:10.209 dcac Delete type=0 #117
+2026/06/19-15:47:10.209 dcac Compacting 4@0 + 1@1 files
+2026/06/19-15:47:10.211 dcac Generated table #121@0: 35 keys, 20176 bytes
+2026/06/19-15:47:10.211 dcac Compacted 4@0 + 1@1 files => 20176 bytes
+2026/06/19-15:47:10.211 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-15:47:10.211 dcac Delete type=2 #112
+2026/06/19-15:47:10.212 dcac Delete type=2 #114
+2026/06/19-15:47:10.212 dcac Delete type=2 #116
+2026/06/19-15:47:10.212 dcac Delete type=2 #118
+2026/06/19-15:47:10.212 dcac Delete type=2 #120
+2026/06/19-15:52:10.217 dcac Level-0 table #123: started
+2026/06/19-15:52:10.220 dcac Level-0 table #123: 21168 bytes OK
+2026/06/19-15:52:10.220 dcac Delete type=0 #119
+2026/06/19-15:57:10.210 dcac Level-0 table #125: started
+2026/06/19-15:57:10.213 dcac Level-0 table #125: 21167 bytes OK
+2026/06/19-15:57:10.213 dcac Delete type=0 #122
+2026/06/19-16:02:10.208 dcac Level-0 table #127: started
+2026/06/19-16:02:10.210 dcac Level-0 table #127: 21168 bytes OK
+2026/06/19-16:02:10.211 dcac Delete type=0 #124
+2026/06/19-16:07:10.217 dcac Level-0 table #129: started
+2026/06/19-16:07:10.220 dcac Level-0 table #129: 21168 bytes OK
+2026/06/19-16:07:10.222 dcac Delete type=0 #126
+2026/06/19-16:07:10.222 dcac Compacting 4@0 + 1@1 files
+2026/06/19-16:07:10.225 dcac Generated table #130@0: 35 keys, 20176 bytes
+2026/06/19-16:07:10.225 dcac Compacted 4@0 + 1@1 files => 20176 bytes
+2026/06/19-16:07:10.225 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-16:07:10.226 dcac Delete type=2 #121
+2026/06/19-16:07:10.226 dcac Delete type=2 #123
+2026/06/19-16:07:10.226 dcac Delete type=2 #125
+2026/06/19-16:07:10.226 dcac Delete type=2 #127
+2026/06/19-16:07:10.226 dcac Delete type=2 #129
+2026/06/19-16:12:10.216 dcac Level-0 table #132: started
+2026/06/19-16:12:10.221 dcac Level-0 table #132: 21168 bytes OK
+2026/06/19-16:12:10.222 dcac Delete type=0 #128
+2026/06/19-16:17:10.222 dcac Level-0 table #134: started
+2026/06/19-16:17:10.225 dcac Level-0 table #134: 21168 bytes OK
+2026/06/19-16:17:10.226 dcac Delete type=0 #131
+2026/06/19-16:22:10.216 dcac Level-0 table #136: started
+2026/06/19-16:22:10.220 dcac Level-0 table #136: 21168 bytes OK
+2026/06/19-16:22:10.222 dcac Delete type=0 #133
+2026/06/19-16:27:10.217 dcac Level-0 table #138: started
+2026/06/19-16:27:10.221 dcac Level-0 table #138: 21168 bytes OK
+2026/06/19-16:27:10.222 dcac Delete type=0 #135
+2026/06/19-16:27:10.222 dcac Compacting 4@0 + 1@1 files
+2026/06/19-16:27:10.226 dcac Generated table #139@0: 35 keys, 20176 bytes
+2026/06/19-16:27:10.226 dcac Compacted 4@0 + 1@1 files => 20176 bytes
+2026/06/19-16:27:10.226 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-16:27:10.227 dcac Delete type=2 #130
+2026/06/19-16:27:10.227 dcac Delete type=2 #132
+2026/06/19-16:27:10.227 dcac Delete type=2 #134
+2026/06/19-16:27:10.227 dcac Delete type=2 #136
+2026/06/19-16:27:10.227 dcac Delete type=2 #138
+2026/06/19-16:32:10.222 dcac Level-0 table #141: started
+2026/06/19-16:32:10.225 dcac Level-0 table #141: 21168 bytes OK
+2026/06/19-16:32:10.226 dcac Delete type=0 #137
+2026/06/19-16:37:10.214 dcac Level-0 table #143: started
+2026/06/19-16:37:10.218 dcac Level-0 table #143: 21167 bytes OK
+2026/06/19-16:37:10.219 dcac Delete type=0 #140
+2026/06/19-16:42:10.219 dcac Level-0 table #145: started
+2026/06/19-16:42:10.223 dcac Level-0 table #145: 21168 bytes OK
+2026/06/19-16:42:10.224 dcac Delete type=0 #142
+2026/06/19-16:47:10.208 dcac Level-0 table #147: started
+2026/06/19-16:47:10.210 dcac Level-0 table #147: 21168 bytes OK
+2026/06/19-16:47:10.211 dcac Delete type=0 #144
+2026/06/19-16:47:10.211 dcac Compacting 4@0 + 1@1 files
+2026/06/19-16:47:10.214 dcac Generated table #148@0: 35 keys, 20176 bytes
+2026/06/19-16:47:10.214 dcac Compacted 4@0 + 1@1 files => 20176 bytes
+2026/06/19-16:47:10.214 dcac compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/06/19-16:47:10.215 dcac Delete type=2 #139
+2026/06/19-16:47:10.215 dcac Delete type=2 #141
+2026/06/19-16:47:10.215 dcac Delete type=2 #143
+2026/06/19-16:47:10.215 dcac Delete type=2 #145
+2026/06/19-16:47:10.215 dcac Delete type=2 #147
