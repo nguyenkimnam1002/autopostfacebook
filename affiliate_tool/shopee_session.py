@@ -76,8 +76,7 @@ def read_shopee_cookie(port: int = DEFAULT_DEBUG_PORT) -> str:
     ws_url = _browser_ws_url(port)
     client = _CdpWebSocket(ws_url)
     try:
-        created = client.call("Target.createTarget", {"url": SHOPEE_URL})
-        target_id = created.get("targetId")
+        target_id = _get_or_create_shopee_target(client, port)
         if not target_id:
             raise ShopeeSessionError("Khong tao duoc Shopee tab trong Chrome debug profile.")
         attached = client.call("Target.attachToTarget", {"targetId": target_id, "flatten": True})
@@ -108,8 +107,7 @@ def fetch_json_in_shopee_chrome(url: str, port: int = DEFAULT_DEBUG_PORT) -> dic
     ws_url = _browser_ws_url(port)
     client = _CdpWebSocket(ws_url)
     try:
-        created = client.call("Target.createTarget", {"url": SHOPEE_URL})
-        target_id = created.get("targetId")
+        target_id = _get_or_create_shopee_target(client, port)
         if not target_id:
             raise ShopeeSessionError("Khong tao duoc Shopee tab trong Chrome.")
         attached = client.call("Target.attachToTarget", {"targetId": target_id, "flatten": True})
@@ -154,6 +152,34 @@ def fetch_json_in_shopee_chrome(url: str, port: int = DEFAULT_DEBUG_PORT) -> dic
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise ShopeeSessionError("Chrome fetch Shopee returned non-JSON response") from exc
+
+
+def _get_or_create_shopee_target(client: "_CdpWebSocket", port: int) -> str | None:
+    target_id = _existing_shopee_target_id(port)
+    if target_id:
+        return target_id
+    created = client.call("Target.createTarget", {"url": SHOPEE_URL})
+    return created.get("targetId")
+
+
+def _existing_shopee_target_id(port: int) -> str | None:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=3) as response:
+            targets = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, json.JSONDecodeError):
+        return None
+    for item in targets or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "page":
+            continue
+        url = str(item.get("url") or "")
+        if "shopee.vn" not in url:
+            continue
+        target_id = item.get("id") or item.get("targetId")
+        if target_id:
+            return str(target_id)
+    return None
 
 
 def _find_chrome() -> str:

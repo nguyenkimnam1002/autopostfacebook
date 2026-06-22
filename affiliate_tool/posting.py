@@ -8,25 +8,12 @@ from pathlib import Path
 from .models import Product, RankedProduct
 
 
-def format_vnd(value: int | None) -> str:
-    if value is None:
-        return "xem giá trong link"
-    return f"{value:,}".replace(",", ".") + "đ"
-
-
 def build_facebook_post(product: Product, reasons: list[str] | None = None) -> str:
-    discount = ""
-    if product.discount_percent:
-        discount = f" | giảm khoảng {product.discount_percent:.0f}%"
-
     reason_lines = reasons[:3] if reasons else [
-        "phù hợp nhóm đồ gia dụng, nên kiểm tra lại voucher và phí ship trước khi mua"
+        "phù hợp nhóm đồ gia dụng, nên kiểm tra lại voucher và phí ship trong link trước khi mua"
     ]
     body = [
-        _opening_line(product),
-        "",
-        product.title,
-        f"Giá tham khảo: {format_vnd(product.price)}{discount}",
+        _product_title(product),
         f"Shop: {product.shop_name or 'xem trong link'}",
         "",
         "Điểm nổi bật:",
@@ -35,22 +22,17 @@ def build_facebook_post(product: Product, reasons: list[str] | None = None) -> s
         "Link sản phẩm:",
         product.url,
         "",
-        "Lưu ý: Giá, voucher và tồn kho có thể thay đổi theo từng thời điểm.",
+        "Lưu ý: voucher và tồn kho có thể thay đổi theo từng thời điểm.",
     ]
     return textwrap.dedent("\n".join(body)).strip()
 
 
-def _opening_line(product: Product) -> str:
-    title = product.title.lower()
-    if "quạt" in title:
-        return "Mình thấy mẫu quạt này khá đáng cân nhắc cho những ngày nóng:"
-    if "đèn" in title or "den" in title:
-        return "Có một món đồ gia dụng khá tiện để tham khảo hôm nay:"
-    if "lau" in title or "chổi" in title or "choi" in title:
-        return "Món dọn dẹp này nhìn khá thực dụng, mình lưu lại cho mọi người tham khảo:"
-    if "giấy" in title or "giay" in title:
-        return "Một món dùng hằng ngày, giá và tín hiệu bán khá ổn:"
-    return "Hôm nay mình chọn được một món gia dụng đáng để cân nhắc:"
+def build_facebook_reel_title(product: Product) -> str:
+    return _product_title(product)
+
+
+def _product_title(product: Product) -> str:
+    return product.title.strip()
 
 
 def save_post(text: str, output_dir: str | Path, filename: str = "facebook_post.txt") -> Path:

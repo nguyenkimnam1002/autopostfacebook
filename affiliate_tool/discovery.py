@@ -9,7 +9,7 @@ import urllib.request
 
 from .config import get_env
 from .models import Product
-from .shopee_session import ShopeeSessionError, fetch_json_in_shopee_chrome
+from .shopee_session import DEFAULT_DEBUG_PORT, ShopeeSessionError, _debug_endpoint_ready, fetch_json_in_shopee_chrome
 
 
 DEFAULT_HOME_KEYWORDS = [
@@ -237,6 +237,11 @@ def _shopee_get_json(
             body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code in {401, 403} and _debug_endpoint_ready(DEFAULT_DEBUG_PORT):
+            try:
+                return fetch_json_in_shopee_chrome(url, port=DEFAULT_DEBUG_PORT)
+            except ShopeeSessionError:
+                pass
         raise DiscoveryError(f"Shopee HTTP {exc.code}: {detail[:160]}") from exc
     except urllib.error.URLError as exc:
         raise DiscoveryError(f"Shopee network error: {exc}") from exc
@@ -303,6 +308,7 @@ def enrich_products_with_media(
     headers_override: dict[str, str] | None = None,
     use_browser: bool = False,
     limit: int | None = None,
+    refresh_existing: bool = False,
 ) -> list[str]:
     """Fill missing image/video URLs on products in-place. Returns warnings."""
     errors: list[str] = []
@@ -327,12 +333,16 @@ def enrich_products_with_media(
             product.image_url = media["images"][0]
             product.image_urls = media["images"][1:]
         if media["videos"]:
-            merged_videos: list[str] = []
-            for url in [product.video_url, *product.video_urls, *media["videos"]]:
-                if url and url not in merged_videos:
-                    merged_videos.append(url)
-            product.video_url = merged_videos[0]
-            product.video_urls = merged_videos[1:]
+            if refresh_existing:
+                product.video_url = media["videos"][0]
+                product.video_urls = media["videos"][1:]
+            else:
+                merged_videos: list[str] = []
+                for url in [product.video_url, *product.video_urls, *media["videos"]]:
+                    if url and url not in merged_videos:
+                        merged_videos.append(url)
+                product.video_url = merged_videos[0]
+                product.video_urls = merged_videos[1:]
     return errors
 
 

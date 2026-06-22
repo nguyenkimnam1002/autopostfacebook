@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import cgi
 import json
+import mimetypes
+import re
 import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,7 +29,13 @@ from .facebook_auth import (
     inspect_token,
     load_page_auth,
 )
-from .facebook_graph import graph_configured, publish_products_to_page, publish_stories_to_page
+from .facebook_graph import (
+    graph_configured,
+    publish_four_photos_to_page,
+    publish_products_to_page,
+    publish_reels_to_page,
+    publish_stories_to_page,
+)
 from .groq_analyzer import DEFAULT_MODEL, GroqUnavailable, rank_with_groq
 from .loaders import load_products_from_csv
 from .models import Product, RankedProduct
@@ -65,6 +73,9 @@ class AffiliateHandler(BaseHTTPRequestHandler):
         if parsed.path == f"{APP_PATH}/health":
             self._send_json({"ok": True})
             return
+        if parsed.path == f"{APP_PATH}/api/archive-media":
+            self._handle_archive_media(parsed)
+            return
         self._send_json({"error": "not found"}, status=404)
 
     def do_POST(self) -> None:
@@ -96,8 +107,14 @@ class AffiliateHandler(BaseHTTPRequestHandler):
         if parsed.path == f"{APP_PATH}/api/facebook-queue":
             self._handle_facebook_queue()
             return
+        if parsed.path == f"{APP_PATH}/api/facebook-four-photo-queue":
+            self._handle_facebook_four_photo_queue()
+            return
         if parsed.path == f"{APP_PATH}/api/facebook-story-queue":
             self._handle_facebook_story_queue()
+            return
+        if parsed.path == f"{APP_PATH}/api/facebook-reel-queue":
+            self._handle_facebook_reel_queue()
             return
         if parsed.path == f"{APP_PATH}/api/facebook-auth-start":
             self._handle_facebook_auth_start()
@@ -107,6 +124,12 @@ class AffiliateHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == f"{APP_PATH}/api/facebook-token-exchange":
             self._handle_facebook_token_exchange()
+            return
+        if parsed.path == f"{APP_PATH}/api/archive-dates":
+            self._handle_archive_dates()
+            return
+        if parsed.path == f"{APP_PATH}/api/archive-products":
+            self._handle_archive_products()
             return
         if parsed.path == f"{APP_PATH}/api/export-products":
             self._handle_export_products()
@@ -339,7 +362,8 @@ class AffiliateHandler(BaseHTTPRequestHandler):
             products = [_product_from_dict(item) for item in raw_items]
 
             cookie = str(body.get("shopee_cookie") or "").strip() or None
-            use_browser, source_note = _shopee_media_source(cookie)
+            cookie, use_browser, source_note = _shopee_media_source(cookie)
+            force_refresh_media = bool(body.get("force_refresh_media"))
             if not use_browser and not cookie:
                 self._send_json(
                     {
@@ -358,20 +382,39 @@ class AffiliateHandler(BaseHTTPRequestHandler):
                 products,
                 cookie=cookie,
                 use_browser=use_browser,
+                refresh_existing=force_refresh_media,
             )
             enriched_count = 0
             for raw_item, product in zip(raw_items, products):
                 if not isinstance(raw_item, dict):
                     continue
-                before = bool(raw_item.get("image_url") or raw_item.get("video_url"))
+                before = json.dumps(
+                    {
+                        "image_url": raw_item.get("image_url"),
+                        "image_urls": raw_item.get("image_urls") or [],
+                        "video_url": raw_item.get("video_url"),
+                        "video_urls": raw_item.get("video_urls") or [],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
                 if product.image_url:
                     raw_item["image_url"] = product.image_url
                     raw_item["image_urls"] = product.image_urls
                 if product.video_url:
                     raw_item["video_url"] = product.video_url
                     raw_item["video_urls"] = product.video_urls
-                after = bool(raw_item.get("image_url") or raw_item.get("video_url"))
-                if after and not before:
+                after = json.dumps(
+                    {
+                        "image_url": raw_item.get("image_url"),
+                        "image_urls": raw_item.get("image_urls") or [],
+                        "video_url": raw_item.get("video_url"),
+                        "video_urls": raw_item.get("video_urls") or [],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                if after != before:
                     enriched_count += 1
 
             warning_parts = [source_note] if source_note else []
@@ -499,6 +542,161 @@ class AffiliateHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=500)
 
+    def _handle_facebook_four_photo_queue(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(length).decode("utf-8")
+            body = json.loads(raw_body or "{}")
+            if not graph_configured():
+                raise ValueError("Can ket noi Facebook Graph API truoc khi dang bai 4 anh.")
+            raw_items = body.get("products", [])
+            if len(raw_items) > 5:
+                raise ValueError("Moi lan chi nen dang toi da 5 bai 4 anh.")
+            normalized_items = [
+                _absolutize_item_media_urls(item, self.headers.get("Host") or "127.0.0.1:8001")
+                for item in raw_items
+            ]
+            products = [_product_from_dict(item) for item in normalized_items]
+            products = [product for product in products if product.title and product.url]
+            missing_image = [
+                product.title[:40]
+                for product in products
+                if not (product.image_url or product.image_urls)
+            ]
+            if missing_image:
+                raise ValueError("Dang bai 4 anh chi nhan san pham co anh. Thieu anh: " + "; ".join(missing_image))
+            graph_items = [
+                (product, raw_item.get("post") if isinstance(raw_item, dict) else None)
+                for raw_item, product in zip(normalized_items, products)
+            ]
+            results = publish_four_photos_to_page(graph_items)
+            ok_count = sum(1 for item in results if item.ok)
+            failed = [item for item in results if not item.ok]
+            if ok_count and failed:
+                message = (
+                    f"Da dang {ok_count}/{len(results)} bai 4 anh. "
+                    + "Bai loi: "
+                    + "; ".join(f"{item.title[:40]} ({item.error})" for item in failed)
+                )
+            elif not ok_count:
+                message = "Khong dang duoc bai 4 anh nao: " + "; ".join(
+                    f"{item.title[:40]} ({item.error})" for item in failed
+                )
+            else:
+                message = f"Da dang {ok_count} bai 4 anh qua Meta Graph API."
+            self._send_json(
+                {
+                    "ok": ok_count > 0,
+                    "all_ok": ok_count == len(results),
+                    "posted_via_graph": True,
+                    "count": len(results),
+                    "ok_count": ok_count,
+                    "results": [item.__dict__ for item in results],
+                    "message": message,
+                },
+                status=200,
+            )
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=500)
+
+    def _handle_facebook_reel_queue(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(length).decode("utf-8")
+            body = json.loads(raw_body or "{}")
+            if not graph_configured():
+                raise ValueError("Can ket noi Facebook Graph API truoc khi dang thước phim.")
+            raw_items = body.get("products", [])
+            if len(raw_items) > 5:
+                raise ValueError("Moi lan chi nen dang toi da 5 thước phim.")
+            products = [_product_from_dict(item) for item in raw_items]
+            products = [product for product in products if product.title and product.url]
+            missing_video = [
+                product.title[:40]
+                for product in products
+                if not (product.video_url or product.video_urls)
+            ]
+            if missing_video:
+                raise ValueError("Chi dang Reels cho san pham co video. Thieu video: " + "; ".join(missing_video))
+            results = publish_reels_to_page(products)
+            ok_count = sum(1 for item in results if item.ok)
+            failed = [item for item in results if not item.ok]
+            if ok_count and failed:
+                message = (
+                    f"Da dang {ok_count}/{len(results)} thước phim. "
+                    + "Reels loi: "
+                    + "; ".join(f"{item.title[:40]} ({item.error})" for item in failed)
+                )
+            elif not ok_count:
+                message = "Khong dang duoc thước phim nao: " + "; ".join(
+                    f"{item.title[:40]} ({item.error})" for item in failed
+                )
+            else:
+                message = f"Da dang {ok_count} thước phim qua Meta Graph API."
+            self._send_json(
+                {
+                    "ok": ok_count > 0,
+                    "all_ok": ok_count == len(results),
+                    "posted_via_graph": True,
+                    "count": len(results),
+                    "ok_count": ok_count,
+                    "results": [item.__dict__ for item in results],
+                    "message": message,
+                },
+                status=200,
+            )
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=500)
+
+    def _handle_archive_dates(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(length).decode("utf-8")
+            body = json.loads(raw_body or "{}")
+            output_root = body.get("output_root") or "out"
+            dates = _archive_dates(output_root)
+            self._send_json({"ok": True, "dates": dates})
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=500)
+
+    def _handle_archive_products(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(length).decode("utf-8")
+            body = json.loads(raw_body or "{}")
+            output_root = body.get("output_root") or "out"
+            selected_date = str(body.get("date") or "").strip()
+            items = _archive_products(output_root, selected_date)
+            self._send_json(
+                {
+                    "ok": True,
+                    "date": selected_date,
+                    "count": len(items),
+                    "items": items,
+                }
+            )
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=500)
+
+    def _handle_archive_media(self, parsed) -> None:
+        try:
+            query = urllib.parse.parse_qs(parsed.query)
+            output_root = query.get("output_root", ["out"])[0] or "out"
+            selected_date = query.get("date", [""])[0]
+            folder = query.get("folder", [""])[0]
+            filename = query.get("file", [""])[0]
+            path = _archive_media_path(output_root, selected_date, folder, filename)
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            data = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "private, max-age=3600")
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=404)
+
     def _handle_export_products(self) -> None:
         try:
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -568,15 +766,22 @@ def _load_products(form: cgi.FieldStorage, source: str) -> tuple[list[Product], 
         ) from exc
 
 
-def _shopee_media_source(cookie: str | None) -> tuple[bool, str | None]:
-    """Decide how to fetch Shopee media. Prefer the logged-in Chrome debug session."""
+def _shopee_media_source(cookie: str | None) -> tuple[str | None, bool, str | None]:
+    """Prefer reusing the logged-in Chrome session by extracting its cookie and fetching in the background."""
     from .shopee_session import DEFAULT_DEBUG_PORT, _debug_endpoint_ready
 
     if _debug_endpoint_ready(DEFAULT_DEBUG_PORT):
-        return True, None
+        try:
+            return (
+                read_shopee_cookie(DEFAULT_DEBUG_PORT),
+                False,
+                "Dang dung cookie tu Chrome login Shopee de lay media trong nen, khong mo tab moi.",
+            )
+        except ShopeeSessionError:
+            pass
     if cookie:
-        return False, "Dang dung cookie Shopee truc tiep (neu thieu anh, hay mo Chrome dang nhap Shopee)."
-    return False, None
+        return cookie, False, "Dang dung cookie Shopee truc tiep (neu thieu anh, hay mo Chrome dang nhap Shopee)."
+    return None, False, None
 
 
 def _product_from_dict(item: dict) -> Product:
@@ -600,6 +805,28 @@ def _product_from_dict(item: dict) -> Product:
         video_urls=[str(value) for value in item.get("video_urls") or [] if value],
         description=item.get("description"),
     )
+
+
+def _absolutize_item_media_urls(item: dict, host: str) -> dict:
+    if not isinstance(item, dict):
+        return item
+    normalized = dict(item)
+    normalized["image_url"] = _absolutize_media_url(normalized.get("image_url"), host)
+    normalized["image_urls"] = [_absolutize_media_url(value, host) for value in normalized.get("image_urls") or [] if value]
+    normalized["video_url"] = _absolutize_media_url(normalized.get("video_url"), host)
+    normalized["video_urls"] = [_absolutize_media_url(value, host) for value in normalized.get("video_urls") or [] if value]
+    return normalized
+
+
+def _absolutize_media_url(value: object, host: str) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if raw.startswith("/"):
+        return f"http://{host}{raw}"
+    return raw
 
 
 def _save_upload(form: cgi.FieldStorage) -> Path:
@@ -692,6 +919,207 @@ def _best_urls(primary: list[str], fallback: list[str]) -> list[str]:
         if url and url not in values:
             values.append(url)
     return values
+
+
+def _archive_dates(output_root: str | Path) -> list[dict]:
+    root = Path(output_root)
+    if not root.exists() or not root.is_dir():
+        return []
+    dates: list[dict] = []
+    for day_dir in root.iterdir():
+        if not day_dir.is_dir() or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_dir.name):
+            continue
+        count = len([path for path in day_dir.iterdir() if path.is_dir() and (path / "product.json").exists()])
+        dates.append({"date": day_dir.name, "count": count})
+    return sorted(dates, key=lambda item: item["date"], reverse=True)
+
+
+def _archive_products(output_root: str | Path, selected_date: str) -> list[dict]:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", selected_date):
+        raise ValueError("Ngay archive khong hop le. Dinh dang dung la YYYY-MM-DD.")
+    day_dir = Path(output_root) / selected_date
+    if not day_dir.exists() or not day_dir.is_dir():
+        raise ValueError(f"Khong tim thay thu muc output cho ngay {selected_date}.")
+
+    summary_rank: dict[str, dict] = {}
+    summary_path = day_dir / "summary.json"
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            summary = []
+        if isinstance(summary, list):
+            for index, item in enumerate(summary, start=1):
+                if not isinstance(item, dict):
+                    continue
+                folder = Path(str(item.get("folder") or "")).name
+                if folder:
+                    summary_rank[folder] = {
+                        "rank": item.get("rank") or index,
+                        "score": item.get("score"),
+                        "images": item.get("images") or [],
+                        "videos": item.get("videos") or [],
+                    }
+
+    items: list[dict] = []
+    for product_path in day_dir.glob("*/product.json"):
+        try:
+            data = json.loads(product_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        post_path = product_path.parent / "post.txt"
+        try:
+            post_text = post_path.read_text(encoding="utf-8") if post_path.exists() else ""
+        except OSError:
+            post_text = ""
+        item = _archive_product_to_item(
+            data=data,
+            post_text=post_text,
+            output_root=output_root,
+            folder_name=product_path.parent.name,
+            selected_date=selected_date,
+            summary_info=summary_rank.get(product_path.parent.name, {}),
+        )
+        if item:
+            items.append(item)
+
+    return sorted(items, key=lambda item: (_optional_int(item.get("rank")) or 999999, item.get("title") or ""))
+
+
+def _archive_product_to_item(
+    data: dict,
+    post_text: str,
+    output_root: str | Path,
+    folder_name: str,
+    selected_date: str,
+    summary_info: dict,
+) -> dict | None:
+    title = str(data.get("title") or "").strip()
+    affiliate_url = str(data.get("affiliate_url") or data.get("url") or "").strip()
+    if not title or not affiliate_url:
+        return None
+    image_urls = [str(url) for url in data.get("detected_images") or data.get("image_urls") or [] if url]
+    if data.get("image_url"):
+        image_urls.insert(0, str(data["image_url"]))
+    video_urls = [str(url) for url in data.get("detected_videos") or data.get("video_urls") or [] if url]
+    if data.get("video_url"):
+        video_urls.insert(0, str(data["video_url"]))
+    local_images, local_videos = _archive_media_urls(output_root, selected_date, folder_name, summary_info)
+    image_urls = _best_urls(local_images, image_urls)
+    video_urls = _best_urls(local_videos, video_urls)
+    reasons = [str(value) for value in data.get("reasons") or [] if value]
+    score = _optional_float(data.get("score"))
+    if score is None:
+        score = _optional_float(summary_info.get("score"))
+    product = Product(
+        title=title,
+        url=affiliate_url,
+        product_id=str(data.get("product_id") or folder_name) or None,
+        source_url=str(data.get("source_url") or "") or None,
+        price=_optional_int(data.get("price")),
+        original_price=_optional_int(data.get("original_price")),
+        sold_week=_optional_int(data.get("sold_week")),
+        sold_month=_optional_int(data.get("sold_month")),
+        rating=_optional_float(data.get("rating")),
+        review_count=_optional_int(data.get("review_count")),
+        commission_rate=_optional_float(data.get("commission_rate")),
+        shop_name=data.get("shop_name"),
+        category=data.get("category"),
+        image_url=image_urls[0] if image_urls else None,
+        image_urls=image_urls[1:],
+        video_url=video_urls[0] if video_urls else None,
+        video_urls=video_urls[1:],
+        description=data.get("detected_description") or data.get("description"),
+    )
+    item = _ranked_to_dict(RankedProduct(product=product, score=score or 0, reasons=reasons, source=f"old-{selected_date}"))
+    item["post"] = post_text or item["post"]
+    item["rank"] = _optional_int(summary_info.get("rank")) or None
+    item["archive_date"] = selected_date
+    return item
+
+
+def _archive_media_urls(
+    output_root: str | Path,
+    selected_date: str,
+    folder_name: str,
+    summary_info: dict,
+) -> tuple[list[str], list[str]]:
+    try:
+        folder = _archive_folder_path(output_root, selected_date, folder_name)
+    except ValueError:
+        return [], []
+    summary_images = _summary_media_names(summary_info.get("images"), folder)
+    summary_videos = _summary_media_names(summary_info.get("videos"), folder)
+    image_names = _best_urls(summary_images, _media_filenames(folder, {"jpg", "jpeg", "png", "webp", "gif"}))
+    video_names = _best_urls(summary_videos, _media_filenames(folder, {"mp4", "webm", "mov", "m4v"}))
+    return (
+        [_archive_media_url(output_root, selected_date, folder_name, name) for name in image_names],
+        [_archive_media_url(output_root, selected_date, folder_name, name) for name in video_names],
+    )
+
+
+def _summary_media_names(values: object, folder: Path) -> list[str]:
+    names: list[str] = []
+    for value in values or []:
+        name = Path(str(value)).name
+        if name and (folder / name).exists() and name not in names:
+            names.append(name)
+    return names
+
+
+def _media_filenames(folder: Path, extensions: set[str]) -> list[str]:
+    names: list[str] = []
+    for path in sorted(folder.iterdir(), key=lambda item: item.name):
+        if not path.is_file():
+            continue
+        ext = path.suffix.lower().lstrip(".")
+        if ext in extensions:
+            names.append(path.name)
+    return names
+
+
+def _archive_media_url(output_root: str | Path, selected_date: str, folder_name: str, filename: str) -> str:
+    params = urllib.parse.urlencode(
+        {
+            "output_root": str(output_root),
+            "date": selected_date,
+            "folder": folder_name,
+            "file": filename,
+        }
+    )
+    return f"{APP_PATH}/api/archive-media?{params}"
+
+
+def _archive_media_path(output_root: str | Path, selected_date: str, folder_name: str, filename: str) -> Path:
+    if Path(filename).name != filename:
+        raise ValueError("Ten file media khong hop le.")
+    path = _archive_folder_path(output_root, selected_date, folder_name) / filename
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("Khong tim thay file media archive.") from exc
+    folder = _archive_folder_path(output_root, selected_date, folder_name).resolve(strict=True)
+    if folder not in resolved.parents:
+        raise ValueError("Duong dan media archive khong hop le.")
+    if resolved.suffix.lower().lstrip(".") not in {"jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "mov", "m4v"}:
+        raise ValueError("Dinh dang media archive khong duoc ho tro.")
+    return resolved
+
+
+def _archive_folder_path(output_root: str | Path, selected_date: str, folder_name: str) -> Path:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", selected_date):
+        raise ValueError("Ngay archive khong hop le.")
+    if Path(folder_name).name != folder_name or not folder_name:
+        raise ValueError("Thu muc san pham archive khong hop le.")
+    root = Path(output_root).resolve()
+    folder = (root / selected_date / folder_name).resolve()
+    if root not in folder.parents:
+        raise ValueError("Duong dan archive khong hop le.")
+    if not folder.exists() or not folder.is_dir():
+        raise ValueError("Khong tim thay thu muc san pham archive.")
+    return folder
 
 
 def _facebook_redirect_uri(handler: BaseHTTPRequestHandler) -> str:
@@ -792,10 +1220,25 @@ def _page() -> str:
     .media-note { margin-top: 4px; font-size: 11px; color: var(--muted); }
     .pill { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 12px; color: #334155; background: #f8fafc; }
     .post { white-space: pre-wrap; font-size: 13px; max-width: 360px; color: #263342; }
+    .list-controls { margin-bottom: 10px; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .list-controls .radio { margin: 0; }
+    .archive-picker { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .archive-picker.active { display: flex; }
+    .archive-picker input[type="date"] { border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; font-size: 14px; background: #fff; }
+    .archive-picker button { padding: 9px 12px; }
+    .list-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+    .select-all { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #3c4654; font-size: 13px; }
+    .selection-badge {
+      position: fixed; right: 18px; bottom: 18px; z-index: 30; display: none;
+      padding: 10px 14px; border-radius: 999px; background: rgba(23, 32, 42, .92); color: #fff;
+      font-size: 13px; font-weight: 700; box-shadow: 0 10px 24px rgba(15, 23, 42, .18);
+    }
+    .selection-badge.active { display: inline-flex; align-items: center; }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; padding: 12px; }
       .table-wrap { overflow-x: auto; }
       table { min-width: 1080px; }
+      .list-meta { width: 100%; margin-left: 0; }
     }
   </style>
 </head>
@@ -847,9 +1290,11 @@ def _page() -> str:
         <label class="check"><input name="facebook_auto_post" type="checkbox" value="1"> Tu bam Dang sau khi dien noi dung</label>
         <div class="actions">
           <button type="button" id="facebookBtn" class="secondary">Dang bai len Fanpage</button>
+          <button type="button" id="facebookFourPhotoBtn" class="secondary">Dang bai 4 anh</button>
           <button type="button" id="facebookStoryBtn" class="secondary">Dang tin Anh/Video</button>
+          <button type="button" id="facebookReelBtn" class="secondary">Dang thước phim</button>
         </div>
-        <div class="hint">Chi tick 3-5 san pham moi lan dang. Dang tin se uu tien video; neu khong co video thi dung anh dau tien va gui link uu dai Shopee lam lien ket Web neu API cho phep.</div>
+        <div class="hint">Dang bai len Fanpage co the uu tien video neu san pham co video. Dang bai 4 anh chi dang toi da 4 anh dai dien, khong dang video; video va anh con lai se duoc comment kem link mua hang. Dang tin Anh/Video se uu tien video; neu khong co video thi dung anh dau tien. Dang thước phim chi nhan san pham co video. Facebook Page Stories API hien chua ho tro gan link sticker clickable qua Graph API.</div>
         <div id="status" class="status"></div>
         <div id="postProgress" class="progress-wrap">
           <div class="progress-track"><div id="postProgressBar" class="progress-bar"></div></div>
@@ -858,12 +1303,21 @@ def _page() -> str:
       </form>
     </section>
     <section>
+      <div class="list-controls">
+        <label class="radio"><input type="radio" name="productListMode" value="new" checked> San pham moi</label>
+        <label class="radio"><input type="radio" name="productListMode" value="old"> San pham cu</label>
+        <div id="archivePicker" class="archive-picker">
+          <input id="archiveDate" type="date">
+          <button type="button" id="loadArchiveBtn" class="secondary">Tai san pham cu</button>
+        </div>
+        <div id="listMeta" class="list-meta">Dang hien thi san pham moi tu CSV.</div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>#</th>
-              <th>Chon</th>
+              <th><label class="select-all"><input id="pickAllProducts" type="checkbox"> Chon</label></th>
               <th>Anh</th>
               <th>Ma SP</th>
               <th>San pham</th>
@@ -880,6 +1334,7 @@ def _page() -> str:
       </div>
     </section>
   </main>
+  <div id="selectionBadge" class="selection-badge">Da chon 0 san pham</div>
   <script>
     const form = document.getElementById("toolForm");
     const statusBox = document.getElementById("status");
@@ -890,18 +1345,36 @@ def _page() -> str:
     const postProgress = document.getElementById("postProgress");
     const postProgressBar = document.getElementById("postProgressBar");
     const postProgressLabel = document.getElementById("postProgressLabel");
+    const archivePicker = document.getElementById("archivePicker");
+    const archiveDate = document.getElementById("archiveDate");
+    const loadArchiveBtn = document.getElementById("loadArchiveBtn");
+    const pickAllProducts = document.getElementById("pickAllProducts");
+    const selectionBadge = document.getElementById("selectionBadge");
+    const listMeta = document.getElementById("listMeta");
     let extensionReady = false;
     let currentItems = [];
+    let newItems = [];
+    let archiveItems = [];
+    let selectedProductKeys = new Set();
     let shopeeCookie = "";
     let graphReady = false;
     document.getElementById("analyzeBtn").addEventListener("click", submitTool);
     document.getElementById("facebookBtn").addEventListener("click", prepareFacebookQueue);
+    document.getElementById("facebookFourPhotoBtn").addEventListener("click", prepareFacebookFourPhotoQueue);
     document.getElementById("facebookStoryBtn").addEventListener("click", prepareFacebookStoryQueue);
+    document.getElementById("facebookReelBtn").addEventListener("click", prepareFacebookReelQueue);
     document.getElementById("facebookConnectBtn").addEventListener("click", connectFacebook);
     document.getElementById("facebookStatusBtn").addEventListener("click", refreshFacebookAuthStatus);
     document.getElementById("shopeeLoginBtn").addEventListener("click", openShopeeLogin);
     document.getElementById("shopeeCookieBtn").addEventListener("click", readShopeeCookie);
     document.getElementById("facebookTokenBtn").addEventListener("click", exchangeFacebookToken);
+    loadArchiveBtn.addEventListener("click", loadArchiveProducts);
+    pickAllProducts.addEventListener("change", togglePickAllProducts);
+    form.output_root.addEventListener("change", refreshArchiveDates);
+    results.addEventListener("change", onResultSelectionChange);
+    document.querySelectorAll('input[name="productListMode"]').forEach(input => {
+      input.addEventListener("change", switchProductListMode);
+    });
     (function setupTokenButtonState() {
       const tokenInput = document.getElementById("facebookTokenInput");
       const tokenBtn = document.getElementById("facebookTokenBtn");
@@ -920,6 +1393,81 @@ def _page() -> str:
     }, 1200);
     pingExtension();
     refreshFacebookAuthStatus();
+    refreshArchiveDates();
+
+    function selectedProductListMode() {
+      return (document.querySelector('input[name="productListMode"]:checked') || {}).value || "new";
+    }
+
+    function switchProductListMode() {
+      const mode = selectedProductListMode();
+      archivePicker.classList.toggle("active", mode === "old");
+      if (mode === "old") {
+        listMeta.textContent = archiveItems.length
+          ? `Dang hien thi ${archiveItems.length} san pham cu ngay ${archiveDate.value}.`
+          : "Chon ngay va bam Tai san pham cu.";
+        render(archiveItems);
+      } else {
+        listMeta.textContent = newItems.length
+          ? `Dang hien thi ${newItems.length} san pham moi tu CSV.`
+          : "Dang hien thi san pham moi tu CSV.";
+        render(newItems);
+      }
+    }
+
+    async function refreshArchiveDates() {
+      try {
+        const res = await fetch("/affiliate_hot_tool/api/archive-dates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ output_root: form.output_root.value || "out" })
+        });
+        const payload = await res.json();
+        if (!res.ok || payload.error) throw new Error(payload.error || "Khong doc duoc danh sach ngay output");
+        const dates = payload.dates || [];
+        if (dates.length && !archiveDate.value) {
+          archiveDate.value = dates[0].date;
+          archiveDate.max = dates[0].date;
+        }
+        if (dates.length) archiveDate.min = dates[dates.length - 1].date;
+      } catch (err) {
+        listMeta.textContent = "Chua doc duoc danh sach output cu: " + err.message;
+      }
+    }
+
+    async function loadArchiveProducts() {
+      const day = archiveDate.value;
+      if (!day) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Hay chon ngay de tai san pham cu.";
+        return;
+      }
+      statusBox.className = "status warning";
+      statusBox.textContent = `Dang tai san pham cu ngay ${day}...`;
+      loadArchiveBtn.disabled = true;
+      try {
+        const res = await fetch("/affiliate_hot_tool/api/archive-products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ output_root: form.output_root.value || "out", date: day })
+        });
+        const payload = await res.json();
+        if (!res.ok || payload.error) throw new Error(payload.error || "Khong tai duoc san pham cu");
+        archiveItems = payload.items || [];
+        document.querySelector('input[name="productListMode"][value="old"]').checked = true;
+        archivePicker.classList.add("active");
+        render(archiveItems);
+        statusBox.className = "status";
+        statusBox.textContent = `Da tai ${archiveItems.length} san pham cu tu output ngay ${day}.`;
+        listMeta.textContent = `Dang hien thi ${archiveItems.length} san pham cu ngay ${day}.`;
+        await enrichMediaViaBackend();
+      } catch (err) {
+        statusBox.className = "status error";
+        statusBox.textContent = err.message;
+      } finally {
+        loadArchiveBtn.disabled = false;
+      }
+    }
 
     async function connectFacebook() {
       statusBox.className = "status warning";
@@ -967,7 +1515,7 @@ def _page() -> str:
         const res = await fetch("/affiliate_hot_tool/api/open-shopee-login", { method: "POST" });
         const payload = await res.json();
         if (!res.ok || payload.error) throw new Error(payload.error || "Khong mo duoc Chrome login Shopee");
-        shopeeStatus.textContent = "Shopee: da mo Chrome. Hay dang nhap Shopee trong cua so do, sau do bam Kiem tra san pham HOT.";
+        shopeeStatus.textContent = "Shopee: da mo Chrome login. Sau khi dang nhap xong, tool se uu tien dung cookie tu phien nay de lay media trong nen, khong mo tab moi.";
       } catch (err) {
         shopeeStatus.textContent = "Shopee: " + err.message;
       }
@@ -988,21 +1536,24 @@ def _page() -> str:
 
     async function enrichMediaViaBackend() {
       const items = currentItems || [];
+      const refreshAll = selectedProductListMode() === "old";
       const need = items
         .map((it, idx) => ({ it, idx }))
-        .filter(x => x.it && !x.it.image_url && !x.it.video_url && (x.it.source_url || x.it.url));
+        .filter(x => x.it && (x.it.source_url || x.it.url) && (refreshAll || (!x.it.image_url && !x.it.video_url)));
       if (!need.length) return;
       const chunkSize = 4;
       let lastWarning = "";
       for (let start = 0; start < need.length; start += chunkSize) {
         const slice = need.slice(start, start + chunkSize);
         statusBox.className = "status warning";
-        statusBox.textContent = `Dang lay anh/video san pham: ${Math.min(start + slice.length, need.length)}/${need.length}...`;
+        statusBox.textContent = refreshAll
+          ? `Dang lam moi anh/video san pham cu: ${Math.min(start + slice.length, need.length)}/${need.length}...`
+          : `Dang lay anh/video san pham: ${Math.min(start + slice.length, need.length)}/${need.length}...`;
         try {
           const res = await fetch("/affiliate_hot_tool/api/enrich-media", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ products: slice.map(x => x.it), shopee_cookie: shopeeCookie })
+            body: JSON.stringify({ products: slice.map(x => x.it), shopee_cookie: shopeeCookie, force_refresh_media: refreshAll })
           });
           const payload = await res.json();
           if (!res.ok || payload.error) { lastWarning = payload.error || "loi lay media"; break; }
@@ -1010,6 +1561,8 @@ def _page() -> str:
             const target = slice[i];
             if (target) currentItems[target.idx] = p;
           });
+          if (selectedProductListMode() === "new") newItems = currentItems;
+          if (selectedProductListMode() === "old") archiveItems = currentItems;
           render(currentItems);
           if (payload.warning) {
             lastWarning = payload.warning;
@@ -1076,7 +1629,12 @@ def _page() -> str:
         }
         statusBox.textContent = "Dang ghi thu muc out theo ngay...";
         const exported = await exportProducts(ranked.items || [], data);
-        render(exported.items || ranked.items || []);
+        newItems = exported.items || ranked.items || [];
+        document.querySelector('input[name="productListMode"][value="new"]').checked = true;
+        archivePicker.classList.remove("active");
+        render(newItems);
+        listMeta.textContent = `Dang hien thi ${newItems.length} san pham moi tu CSV.`;
+        refreshArchiveDates();
         const parts = [];
         if (payload.warning || ranked.warning) parts.push([payload.warning, ranked.warning].filter(Boolean).join(" "));
         if (exported.exported_dir) parts.push("Da export: " + exported.exported_dir);
@@ -1141,6 +1699,46 @@ def _page() -> str:
       return payload;
     }
 
+    function productSelectionKey(item, index) {
+      if (item && item.product_id) return `id:${item.product_id}`;
+      if (item && item.url) return `url:${item.url}`;
+      return `row:${index}`;
+    }
+
+    function syncSelectedProductKeysFromDom() {
+      selectedProductKeys = new Set(
+        Array.from(document.querySelectorAll(".pick-product:checked"))
+          .map(input => input.dataset.key)
+          .filter(Boolean)
+      );
+    }
+
+    function updateSelectionUi() {
+      const checkboxes = Array.from(document.querySelectorAll(".pick-product"));
+      const checkedCount = checkboxes.filter(input => input.checked).length;
+      const total = checkboxes.length;
+      pickAllProducts.checked = total > 0 && checkedCount === total;
+      pickAllProducts.indeterminate = checkedCount > 0 && checkedCount < total;
+      selectionBadge.textContent = checkedCount ? `Da chon ${checkedCount} san pham` : "Da chon 0 san pham";
+      selectionBadge.classList.toggle("active", checkedCount > 0);
+    }
+
+    function onResultSelectionChange(event) {
+      const target = event.target;
+      if (!target || !target.classList || !target.classList.contains("pick-product")) return;
+      syncSelectedProductKeysFromDom();
+      updateSelectionUi();
+    }
+
+    function togglePickAllProducts() {
+      const checked = !!pickAllProducts.checked;
+      document.querySelectorAll(".pick-product").forEach(input => {
+        input.checked = checked;
+      });
+      syncSelectedProductKeysFromDom();
+      updateSelectionUi();
+    }
+
     function pingExtension() {
       extensionReady = false;
       extensionStatus.textContent = "Extension: dang ping, chi dung cho fallback Facebook/Shopee neu can...";
@@ -1172,12 +1770,16 @@ def _page() -> str:
       currentItems = items || [];
       if (!items.length) {
         results.innerHTML = '<tr><td colspan="9">Khong co san pham phu hop.</td></tr>';
+        pickAllProducts.checked = false;
+        pickAllProducts.indeterminate = false;
+        selectionBadge.classList.remove("active");
+        selectionBadge.textContent = "Da chon 0 san pham";
         return;
       }
       results.innerHTML = items.map((item, index) => `
         <tr>
           <td>${index + 1}</td>
-          <td><input class="pick-product" type="checkbox" data-index="${index}"></td>
+          <td><input class="pick-product" type="checkbox" data-index="${index}" data-key="${escapeAttr(productSelectionKey(item, index))}" ${selectedProductKeys.has(productSelectionKey(item, index)) ? "checked" : ""}></td>
           <td>${mediaPreview(item)}</td>
           <td>${escapeHtml(item.product_id || "")}</td>
           <td><strong>${escapeHtml(item.title)}</strong><br><span class="pill">${escapeHtml(item.source)}</span></td>
@@ -1187,6 +1789,8 @@ def _page() -> str:
           <td><a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">Mo link</a></td>
         </tr>
       `).join("");
+      syncSelectedProductKeysFromDom();
+      updateSelectionUi();
     }
 
     function sleep(ms) {
@@ -1220,7 +1824,7 @@ def _page() -> str:
           const product = selected[i];
           const shortTitle = (product.title || "").slice(0, 30);
           updatePostProgress(i, total, `Dang dang bai ${i + 1}/${total}: ${shortTitle}`);
-          statusBox.textContent = `Dang dang bai ${i + 1}/${total} len fanpage...`;
+          statusBox.textContent = `Dang dang bai ${i + 1}/${total} len fanpage, khong dang tin...`;
           let payload;
           try {
             const res = await fetch("/affiliate_hot_tool/api/facebook-queue", {
@@ -1243,7 +1847,7 @@ def _page() -> str:
           updatePostProgress(i + 1, total, r.ok ? `Da dang ${i + 1}/${total}` : `Bai ${i + 1} loi`);
           if (i < total - 1) {
             // Cho 20-30s giua cac bai de tranh Facebook chan spam.
-            for (let s = 25; s >= 1; s--) {
+            for (let s = 20; s >= 1; s--) {
               statusBox.textContent = `Da dang ${i + 1}/${total}. Cho ${s}s truoc khi dang bai tiep theo...`;
               await sleep(1000);
             }
@@ -1310,7 +1914,7 @@ def _page() -> str:
           allResults.push(r);
           updatePostProgress(i + 1, total, r.ok ? `Da dang tin ${i + 1}/${total}` : `Tin ${i + 1} loi`);
           if (i < total - 1) {
-            for (let s = 25; s >= 1; s--) {
+            for (let s = 20; s >= 1; s--) {
               statusBox.textContent = `Da xu ly ${i + 1}/${total} tin. Cho ${s}s truoc khi dang tin tiep theo...`;
               await sleep(1000);
             }
@@ -1334,6 +1938,140 @@ def _page() -> str:
         }
       } finally {
         if (storyBtn) storyBtn.disabled = false;
+        hidePostProgress();
+      }
+    }
+
+    async function postSelectedFourPhotosViaGraph(selected, photoBtn) {
+      const total = selected.length;
+      const allResults = [];
+      if (photoBtn) photoBtn.disabled = true;
+      showPostProgress(total);
+      statusBox.className = "status warning";
+      try {
+        for (let i = 0; i < total; i++) {
+          const product = selected[i];
+          const shortTitle = (product.title || "").slice(0, 30);
+          const hasImage = Boolean(product.image_url || (product.image_urls || []).length);
+          if (!hasImage) {
+            allResults.push({ ok: false, title: product.title, error: "San pham chua co anh de dang bai 4 anh" });
+            updatePostProgress(i + 1, total, `Bai 4 anh ${i + 1} thieu anh`);
+            continue;
+          }
+          updatePostProgress(i, total, `Dang bai 4 anh ${i + 1}/${total}: ${shortTitle}`);
+          statusBox.textContent = `Dang bai 4 anh ${i + 1}/${total} len Page...`;
+          let payload;
+          try {
+            const res = await fetch("/affiliate_hot_tool/api/facebook-four-photo-queue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ products: [product] })
+            });
+            payload = await res.json();
+          } catch (netErr) {
+            allResults.push({ ok: false, title: product.title, error: netErr.message });
+            updatePostProgress(i + 1, total, `Loi mang o bai 4 anh ${i + 1}/${total}`);
+            continue;
+          }
+          const r = (payload.results || [])[0] || {
+            ok: !!payload.ok,
+            title: product.title,
+            error: payload.error || (payload.ok ? null : "Khong dang duoc bai 4 anh")
+          };
+          allResults.push(r);
+          updatePostProgress(i + 1, total, r.ok ? `Da dang bai 4 anh ${i + 1}/${total}` : `Bai 4 anh ${i + 1} loi`);
+          if (i < total - 1) {
+            for (let s = 20; s >= 1; s--) {
+              statusBox.textContent = `Da xu ly ${i + 1}/${total} bai 4 anh. Cho ${s}s truoc khi dang tiep...`;
+              await sleep(1000);
+            }
+          }
+        }
+        const okCount = allResults.filter(r => r.ok).length;
+        const failed = allResults.filter(r => !r.ok);
+        const warnings = allResults.flatMap(r => r.warnings || []);
+        updatePostProgress(total, total, okCount === total ? "Hoan tat dang bai 4 anh" : `Xong, ${okCount}/${total} bai 4 anh thanh cong`);
+        if (okCount === total) {
+          statusBox.className = warnings.length ? "status warning" : "status";
+          statusBox.textContent = `Da dang ${okCount}/${total} bai 4 anh.` + (warnings.length ? " Luu y: " + warnings.slice(0, 3).join(" ") : "");
+        } else if (okCount > 0) {
+          statusBox.className = "status warning";
+          statusBox.textContent = `Da dang ${okCount}/${total} bai 4 anh. Bai loi: ` +
+            failed.map(r => `${(r.title || "").slice(0, 30)} (${r.error})`).join("; ");
+        } else {
+          statusBox.className = "status error";
+          statusBox.textContent = "Khong dang duoc bai 4 anh nao: " +
+            failed.map(r => `${(r.title || "").slice(0, 30)} (${r.error})`).join("; ");
+        }
+      } finally {
+        if (photoBtn) photoBtn.disabled = false;
+        hidePostProgress();
+      }
+    }
+
+    async function postSelectedReelsViaGraph(selected, reelBtn) {
+      const total = selected.length;
+      const allResults = [];
+      if (reelBtn) reelBtn.disabled = true;
+      showPostProgress(total);
+      statusBox.className = "status warning";
+      try {
+        for (let i = 0; i < total; i++) {
+          const product = selected[i];
+          const shortTitle = (product.title || "").slice(0, 30);
+          const hasVideo = Boolean(product.video_url || (product.video_urls || []).length);
+          if (!hasVideo) {
+            allResults.push({ ok: false, title: product.title, error: "San pham chua co video de dang thước phim" });
+            updatePostProgress(i + 1, total, `Reels ${i + 1} thieu video`);
+            continue;
+          }
+          updatePostProgress(i, total, `Dang thước phim ${i + 1}/${total}: ${shortTitle}`);
+          statusBox.textContent = `Dang thước phim ${i + 1}/${total} len Page...`;
+          let payload;
+          try {
+            const res = await fetch("/affiliate_hot_tool/api/facebook-reel-queue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ products: [product] })
+            });
+            payload = await res.json();
+          } catch (netErr) {
+            allResults.push({ ok: false, title: product.title, error: netErr.message });
+            updatePostProgress(i + 1, total, `Loi mang o Reels ${i + 1}/${total}`);
+            continue;
+          }
+          const r = (payload.results || [])[0] || {
+            ok: !!payload.ok,
+            title: product.title,
+            error: payload.error || (payload.ok ? null : "Khong dang duoc thước phim")
+          };
+          allResults.push(r);
+          updatePostProgress(i + 1, total, r.ok ? `Da dang Reels ${i + 1}/${total}` : `Reels ${i + 1} loi`);
+          if (i < total - 1) {
+            for (let s = 20; s >= 1; s--) {
+              statusBox.textContent = `Da xu ly ${i + 1}/${total} thước phim. Cho ${s}s truoc khi dang tiep...`;
+              await sleep(1000);
+            }
+          }
+        }
+        const okCount = allResults.filter(r => r.ok).length;
+        const failed = allResults.filter(r => !r.ok);
+        const warnings = allResults.flatMap(r => r.warnings || []);
+        updatePostProgress(total, total, okCount === total ? "Hoan tat dang Reels" : `Xong, ${okCount}/${total} Reels thanh cong`);
+        if (okCount === total) {
+          statusBox.className = warnings.length ? "status warning" : "status";
+          statusBox.textContent = `Da dang ${okCount}/${total} thước phim.` + (warnings.length ? " Luu y: " + warnings.slice(0, 2).join(" ") : "");
+        } else if (okCount > 0) {
+          statusBox.className = "status warning";
+          statusBox.textContent = `Da dang ${okCount}/${total} thước phim. Reels loi: ` +
+            failed.map(r => `${(r.title || "").slice(0, 30)} (${r.error})`).join("; ");
+        } else {
+          statusBox.className = "status error";
+          statusBox.textContent = "Khong dang duoc thước phim nao: " +
+            failed.map(r => `${(r.title || "").slice(0, 30)} (${r.error})`).join("; ");
+        }
+      } finally {
+        if (reelBtn) reelBtn.disabled = false;
         hidePostProgress();
       }
     }
@@ -1435,6 +2173,66 @@ def _page() -> str:
         return;
       }
       await postSelectedStoriesViaGraph(selected, document.getElementById("facebookStoryBtn"));
+    }
+
+    async function prepareFacebookFourPhotoQueue() {
+      statusBox.className = "status";
+      const selected = Array.from(document.querySelectorAll(".pick-product:checked"))
+        .map(input => currentItems[Number(input.dataset.index)])
+        .filter(Boolean);
+      if (!selected.length) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Hay tick it nhat mot san pham truoc khi dang bai 4 anh.";
+        return;
+      }
+      if (selected.length > 5) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Moi lan chi duoc tick toi da 5 san pham de dang bai 4 anh.";
+        return;
+      }
+      if (!graphReady) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Can ket noi Facebook Graph API truoc khi dang bai 4 anh.";
+        return;
+      }
+      const missingImage = selected.filter(item => !(item.image_url || (item.image_urls || []).length));
+      if (missingImage.length) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Dang bai 4 anh chi nhan san pham co anh. San pham thieu anh: " +
+          missingImage.map(item => (item.title || "").slice(0, 35)).join("; ");
+        return;
+      }
+      await postSelectedFourPhotosViaGraph(selected, document.getElementById("facebookFourPhotoBtn"));
+    }
+
+    async function prepareFacebookReelQueue() {
+      statusBox.className = "status";
+      const selected = Array.from(document.querySelectorAll(".pick-product:checked"))
+        .map(input => currentItems[Number(input.dataset.index)])
+        .filter(Boolean);
+      if (!selected.length) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Hay tick it nhat mot san pham truoc khi dang thước phim.";
+        return;
+      }
+      if (selected.length > 5) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Moi lan chi duoc tick toi da 5 san pham de dang thước phim.";
+        return;
+      }
+      if (!graphReady) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Can ket noi Facebook Graph API truoc khi dang thước phim.";
+        return;
+      }
+      const missingVideo = selected.filter(item => !(item.video_url || (item.video_urls || []).length));
+      if (missingVideo.length) {
+        statusBox.className = "status error";
+        statusBox.textContent = "Dang thước phim chi nhan san pham co video. San pham thieu video: " +
+          missingVideo.map(item => (item.title || "").slice(0, 35)).join("; ");
+        return;
+      }
+      await postSelectedReelsViaGraph(selected, document.getElementById("facebookReelBtn"));
     }
 
     function runFacebookPostQueue(queue, pageUrl, autoPost) {

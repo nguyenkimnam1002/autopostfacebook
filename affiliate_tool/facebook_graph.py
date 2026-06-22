@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 from .facebook_auth import load_page_auth
 from .config import get_env
 from .models import Product
-from .posting import build_facebook_post
+from .posting import build_facebook_post, build_facebook_reel_title
 
 
 class FacebookGraphError(RuntimeError):
@@ -122,6 +123,89 @@ def publish_stories_to_page(products: list[Product]) -> list[FacebookPostResult]
     return results
 
 
+def publish_reels_to_page(products: list[Product]) -> list[FacebookPostResult]:
+    stored_auth = load_page_auth()
+    page_id = stored_auth.page_id if stored_auth else get_env("FACEBOOK_PAGE_ID")
+    token = stored_auth.page_access_token if stored_auth else get_env("FACEBOOK_PAGE_ACCESS_TOKEN")
+    version = get_env("META_GRAPH_VERSION", "v25.0") or "v25.0"
+    if not page_id or not token:
+        raise FacebookGraphError("Missing FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN.")
+
+    results: list[FacebookPostResult] = []
+    for index, product in enumerate(products):
+        if index > 0:
+            time.sleep(_POST_INTERVAL_SECONDS)
+        try:
+            result = _publish_reel_one(version, page_id, token, product)
+            results.append(
+                FacebookPostResult(
+                    product_id=product.product_id,
+                    title=product.title,
+                    ok=result["ok"],
+                    post_id=result.get("post_id"),
+                    object_id=result.get("object_id"),
+                    media_type=result.get("media_type"),
+                    warnings=list(result.get("warnings") or []),
+                    error=result.get("error"),
+                )
+            )
+        except FacebookGraphError as exc:
+            results.append(
+                FacebookPostResult(
+                    product_id=product.product_id,
+                    title=product.title,
+                    ok=False,
+                    error=str(exc),
+                )
+            )
+    return results
+
+
+def publish_four_photos_to_page(items: list[tuple[Product, str | None]]) -> list[FacebookPostResult]:
+    stored_auth = load_page_auth()
+    page_id = stored_auth.page_id if stored_auth else get_env("FACEBOOK_PAGE_ID")
+    token = stored_auth.page_access_token if stored_auth else get_env("FACEBOOK_PAGE_ACCESS_TOKEN")
+    version = get_env("META_GRAPH_VERSION", "v25.0") or "v25.0"
+    if not page_id or not token:
+        raise FacebookGraphError("Missing FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN.")
+
+    results: list[FacebookPostResult] = []
+    for index, (product, post_text) in enumerate(items):
+        if index > 0:
+            time.sleep(_POST_INTERVAL_SECONDS)
+        try:
+            result = _publish_four_photo_post(
+                version=version,
+                page_id=page_id,
+                page_token=token,
+                product=product,
+                message=post_text or build_facebook_post(product, ["sản phẩm được chọn từ file link hàng loạt"]),
+            )
+            results.append(
+                FacebookPostResult(
+                    product_id=product.product_id,
+                    title=product.title,
+                    ok=result["ok"],
+                    post_id=result.get("post_id"),
+                    object_id=result.get("object_id"),
+                    media_type=result.get("media_type"),
+                    comment_count=int(result.get("comment_count") or 0),
+                    warnings=list(result.get("warnings") or []),
+                    error=result.get("error"),
+                )
+            )
+        except FacebookGraphError as exc:
+            results.append(
+                FacebookPostResult(
+                    product_id=product.product_id,
+                    title=product.title,
+                    ok=False,
+                    error=str(exc),
+                )
+            )
+    return results
+
+
 def _publish_one(
     version: str,
     page_id: str,
@@ -165,6 +249,19 @@ def _publish_story_one(version: str, page_id: str, page_token: str, product: Pro
     raise FacebookGraphError("San pham chua co anh/video de dang tin.")
 
 
+def _publish_reel_one(version: str, page_id: str, page_token: str, product: Product) -> dict:
+    video_urls = _unique_urls([product.video_url, *product.video_urls])
+    if not video_urls:
+        raise FacebookGraphError("San pham chua co video de dang Reels.")
+    return _publish_video_reel(
+        version=version,
+        page_id=page_id,
+        page_token=page_token,
+        product=product,
+        video_url=video_urls[0],
+    )
+
+
 def _publish_video_post(
     version: str,
     page_id: str,
@@ -198,6 +295,129 @@ def _publish_video_post(
         "object_id": object_id,
         "media_type": "video",
         "comment_count": link_comment["count"] + comments["count"],
+        "warnings": warnings,
+    }
+
+
+def _publish_video_reel(
+    version: str,
+    page_id: str,
+    page_token: str,
+    product: Product,
+    video_url: str,
+) -> dict:
+    start_payload = _post_form(
+        f"https://graph.facebook.com/{version}/{page_id}/video_reels",
+        {
+            "upload_phase": "start",
+            "access_token": page_token,
+        },
+    )
+    video_id = str(start_payload.get("video_id") or "")
+    upload_url = str(start_payload.get("upload_url") or "")
+    if not video_id or not upload_url:
+        raise FacebookGraphError(f"Facebook Reels start did not return upload data: {start_payload}")
+
+    upload_payload = _post_with_headers(
+        upload_url,
+        {
+            "Authorization": f"OAuth {page_token}",
+            "file_url": video_url,
+        },
+    )
+    if upload_payload and upload_payload.get("success") is False:
+        raise FacebookGraphError(f"Facebook Reels upload failed: {upload_payload}")
+
+    finish_payload = _post_form(
+        f"https://graph.facebook.com/{version}/{page_id}/video_reels",
+        {
+            "upload_phase": "finish",
+            "video_id": video_id,
+            "video_state": "PUBLISHED",
+            "title": build_facebook_reel_title(product),
+            "description": build_facebook_post(product, ["video sản phẩm đang có tín hiệu đáng chú ý"]),
+            "access_token": page_token,
+        },
+    )
+    post_id = str(finish_payload.get("post_id") or finish_payload.get("id") or "")
+    if not finish_payload.get("success") and not post_id:
+        raise FacebookGraphError(f"Facebook Reels finish failed: {finish_payload}")
+    warnings = []
+    if not post_id:
+        warnings.append("Facebook đã nhận Reels; video có thể cần xử lý thêm trước khi hiện trên Page.")
+    return {
+        "ok": True,
+        "post_id": post_id or None,
+        "object_id": post_id or video_id,
+        "media_type": "reel",
+        "warnings": warnings,
+    }
+
+
+def _publish_four_photo_post(
+    version: str,
+    page_id: str,
+    page_token: str,
+    product: Product,
+    message: str,
+) -> dict:
+    image_urls = _unique_urls([product.image_url, *product.image_urls])
+    video_urls = _unique_urls([product.video_url, *product.video_urls])
+    if not image_urls:
+        raise FacebookGraphError("San pham chua co anh de dang bai 4 anh.")
+
+    primary_images = image_urls[:4]
+    extra_images = image_urls[4:12]
+    attached_media: list[str] = []
+    warnings: list[str] = []
+    for index, image_url in enumerate(primary_images, start=1):
+        try:
+            filename, content_type, file_bytes = _read_remote_bytes(image_url)
+            upload_payload = _post_multipart(
+                f"https://graph.facebook.com/{version}/{page_id}/photos",
+                fields={
+                    "published": "false",
+                    "access_token": page_token,
+                },
+                file_field="source",
+                filename=filename,
+                file_bytes=file_bytes,
+                content_type=content_type,
+            )
+        except FacebookGraphError as exc:
+            raise FacebookGraphError(f"Khong tai len duoc anh dai dien {index}: {exc}") from exc
+        media_fbid = str(upload_payload.get("id") or "")
+        if not media_fbid:
+            raise FacebookGraphError(f"Facebook khong tra ve media id cho anh dai dien {index}: {upload_payload}")
+        attached_media.append(json.dumps({"media_fbid": media_fbid}, ensure_ascii=False))
+
+    payload = _post_form(
+        f"https://graph.facebook.com/{version}/{page_id}/feed",
+        {
+            "message": message,
+            **{f"attached_media[{index}]": media for index, media in enumerate(attached_media)},
+            "published": "true",
+            "access_token": page_token,
+        },
+    )
+    post_id = str(payload.get("id") or "")
+    if not post_id:
+        raise FacebookGraphError(f"Facebook album 4 anh did not return post id: {payload}")
+
+    link_comment = _comment_affiliate_link(version, post_id, page_token, product.url)
+    image_comments = _comment_media(version, post_id, page_token, extra_images)
+    video_comments = _comment_video_links(version, post_id, page_token, video_urls)
+    warnings.extend(link_comment["warnings"])
+    warnings.extend(image_comments["warnings"])
+    warnings.extend(video_comments["warnings"])
+    if len(primary_images) < 4:
+        warnings.append(f"San pham chi co {len(primary_images)} anh hop le, chua du 4 anh dai dien.")
+    return {
+        "ok": True,
+        "post_id": post_id,
+        "object_id": post_id,
+        "media_type": "photo_multi",
+        "comment_count": link_comment["count"] + image_comments["count"] + video_comments["count"],
         "warnings": warnings,
     }
 
@@ -290,16 +510,14 @@ def _publish_photo_story(
 
 
 def _finish_story_with_optional_link(url: str, fields: dict[str, str], affiliate_url: str) -> tuple[dict, list[str]]:
-    # Meta's Page Stories API may reject or ignore link-sticker fields depending
-    # on app/Page capability. Try once with the web link, then publish media-only.
-    if not affiliate_url:
-        return _post_form(url, fields), []
-    try:
-        payload = _post_form(url, {**fields, "link": affiliate_url})
-        return payload, ["Da gui link Web kem tin. Neu Facebook khong hien nut link, Page Stories API cua app/Page co the dang khong ho tro link sticker."]
-    except FacebookGraphError as exc:
-        payload = _post_form(url, fields)
-        return payload, [f"Facebook khong nhan link Web cho Story qua API, da dang tin chi voi media: {exc}"]
+    payload = _post_form(url, fields)
+    warnings: list[str] = []
+    if affiliate_url:
+        warnings.append(
+            "Meta Page Stories API hien chi publish media; khong co tham so chinh thuc de tao link sticker clickable. "
+            f"Link uu dai cua san pham la: {affiliate_url}"
+        )
+    return payload, warnings
 
 
 def _publish_photo_post(
@@ -398,6 +616,24 @@ def _comment_media(version: str, object_id: str, page_token: str, image_urls: li
     return {"count": count, "warnings": warnings}
 
 
+def _comment_video_links(version: str, object_id: str, page_token: str, video_urls: list[str]) -> dict:
+    count = 0
+    warnings: list[str] = []
+    for index, video_url in enumerate(video_urls, start=1):
+        try:
+            _post_form(
+                f"https://graph.facebook.com/{version}/{object_id}/comments",
+                {
+                    "message": f"Video sản phẩm {index}: {video_url}",
+                    "access_token": page_token,
+                },
+            )
+            count += 1
+        except FacebookGraphError as exc:
+            warnings.append(f"Không comment được video {index}: {exc}")
+    return {"count": count, "warnings": warnings}
+
+
 def _is_commentable_image(url: str | None) -> bool:
     """Chi nhan anh san pham that tu Shopee CDN; loai link rac/anh la."""
     try:
@@ -437,6 +673,74 @@ def _post_with_headers(url: str, headers: dict[str, str]) -> dict:
         raise FacebookGraphError(_friendly_graph_error(exc.code, detail)) from exc
     except (urllib.error.URLError, json.JSONDecodeError) as exc:
         raise FacebookGraphError(f"Facebook Graph upload error: {exc}") from exc
+
+
+def _post_multipart(
+    url: str,
+    fields: dict[str, str],
+    file_field: str,
+    filename: str,
+    file_bytes: bytes,
+    content_type: str,
+) -> dict:
+    boundary = "----AffiliateHotTool" + uuid.uuid4().hex
+    body = bytearray()
+    for key, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+        body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'.encode("utf-8")
+    )
+    body.extend(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+    body.extend(file_bytes)
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+    request = urllib.request.Request(
+        url,
+        data=bytes(body),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise FacebookGraphError(_friendly_graph_error(exc.code, detail)) from exc
+    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise FacebookGraphError(f"Facebook Graph multipart upload error: {exc}") from exc
+
+
+def _read_remote_bytes(url: str) -> tuple[str, str, bytes]:
+    request = urllib.request.Request(url, headers={"User-Agent": "AffiliateHotTool/0.3"})
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            data = response.read()
+            content_type = response.headers.get_content_type() or "application/octet-stream"
+            filename = _filename_from_url(url, content_type)
+            return filename, content_type, data
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise FacebookGraphError(_friendly_graph_error(exc.code, detail)) from exc
+    except urllib.error.URLError as exc:
+        raise FacebookGraphError(f"Khong tai duoc anh nguon de upload len Facebook: {exc}") from exc
+
+
+def _filename_from_url(url: str, content_type: str) -> str:
+    path = urllib.parse.urlparse(url).path
+    name = path.rsplit("/", 1)[-1] or "image"
+    if "." not in name:
+        ext = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }.get(content_type, ".bin")
+        name += ext
+    return name
 
 
 def _unique_urls(values: list[str | None]) -> list[str]:
